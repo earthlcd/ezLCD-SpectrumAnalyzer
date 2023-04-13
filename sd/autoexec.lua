@@ -88,7 +88,7 @@ function titleScreen(fn, filename) -- Show a title sequence for the program
 	ez.SerialTx("Loading " .. filename .. " result=".. tostring(result) .. "\r\n", 80, debug_port) -- doesn't work
 end
 
-function renderSpectrum()
+function renderSpectrum(audio, dft)
 	local result
 
 	local x_delta = 18
@@ -98,6 +98,8 @@ function renderSpectrum()
 	--f72585 -> 3a0ca3 -> 4cc9f0
 
 	for f = 1, #spectrum, 1 do
+		-- local left = ez.dft_getReal(dft, index) + .0
+
 		local x = f * x_delta
 		local c = math.floor( ( f + .0) / #spectrum * 255)
 		spectrum[f] = spectrum[f] + math.random(-5,5)
@@ -110,6 +112,8 @@ function renderSpectrum()
 
 end
 
+detected_peak1 = 0
+detected_peak2 = 0
 function renderOscope(audio, gain)
 	local result
 
@@ -121,25 +125,54 @@ function renderOscope(audio, gain)
 	local y_max = 156
 	local peak_to_peak = y_max - y_min
 	local peak = peak_to_peak / 2
+	
 
 	-- erase previous scope
-	ez.BoxFill(x_min, y_min, x_max+1, y_max, ez.RGB(0, 0, 40)) -- X1, Y1, X2, Y2, Color
+	ez.BoxFill(x_min, y_min, x_max+1, y_max+1, ez.RGB(0, 0, 40)) -- X1, Y1, X2, Y2, Color
 
 	-- ez.SerialTx("ez.audio_size()=" .. string.format("%d", ez.audio_size(audio)) .. "\r\n", 80, debug_port)
 
 	-- ez.SerialTx("left[" .. string.format("%d", x) .. "]=" .. string.format("%08x", left) .. "    ", 80, debug_port)
 	-- ez.SerialTx("left[" .. string.format("%d", x) .. "]=" .. string.format("%0.0f", left) .. "\r\n", 80, debug_port)
 
+	last_y = y_mid
+	last_x = x_min
 	local index = 1
+	detected_peak1 = detected_peak1 * 0.85
+	detected_peak2 = detected_peak2 * 0.99
 	for x = x_min, x_max, 1 do
-		local left = ez.audio_getLeft(a, index) + .0
+		local left = ez.audio_getLeft(audio, index) + .0
 		index = index + 1
 		left = left / gain * (peak)
 		if(left > peak) then left = peak end
 		if(left < -peak) then left = -peak end
 
-		ez.Plot( x, math.floor(left + y_mid), ez.RGB(math.floor(math.abs(left)), 0xff - math.floor(math.abs(left)), 0) )
+		if math.abs(left) > detected_peak1 then detected_peak1 = math.abs(left) end
+		if math.abs(left) > detected_peak2 then detected_peak2 = math.abs(left) end
+
+		left = math.floor(left + y_mid)
+
+		-- ez.Plot( x, left, ez.RGB(99 + left, 0xff - left, 0) )
+		ez.Line(last_x, last_y, x, left, ez.RGB(0xff - left, 99 + left, 0))
+		last_y = left
+		last_x = x
 	end
+
+	y_min = y_max + 5
+	y_max = y_max + 20
+
+	local graph_peak1 = math.floor(detected_peak1 * 3)
+	local graph_peak2 = math.floor(detected_peak2 * 3)
+	if(graph_peak1 > ez.Width) then graph_peak1 = ez.Width end
+	if(graph_peak2 > ez.Width) then graph_peak2 = ez.Width end
+
+	-- ez.SerialTx("x_min=" .. tostring(x_min) .. "\r\n", 80, debug_port)
+	-- ez.SerialTx("y_max=" .. tostring(y_max) .. "\r\n", 80, debug_port)
+	-- ez.SerialTx("graph_peak=" .. string.format("%0.2f", graph_peak) .. "\r\n", 80, debug_port)
+
+	ez.BoxFill(0, y_min, graph_peak1, y_max, ez.RGB(0, 0xff, 0)) -- X1, Y1, X2, Y2, Color
+	ez.BoxFill(graph_peak1, y_min, x_max, y_max, ez.RGB(0, 0, 0)) -- X1, Y1, X2, Y2, Color
+	ez.BoxFill(graph_peak2-3, y_min, graph_peak2+3, y_max, ez.RGB(graph_peak2, 0xff - graph_peak2, 0)) -- X1, Y1, X2, Y2, Color
 
 end
 
@@ -213,28 +246,42 @@ ez.Pin(1, 0) -- PinNo, Value
 ez.Pin(3, 1) -- PinNo, Value
 
 -- allocate memory for the samples
-a = ez.audio_new(300)
+audio_global = ez.audio_new(300)
+dft_global = ez.dft_new(300)
 ez.I2SopenMaster(1, 2)
 
 spectrum = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 140}
 
 while 1 do
 	ez.Pin(5, 0) -- PinNo, Value
-	ez.I2Sread(a)
+	ez.I2Sread(audio_global)
 	ez.Pin(5, 1) -- PinNo, Value
 	if screen_change == true then
 		if screen == 0 then titleScreen(fn, "/SA/oscilloscope.bmp") end
 		if screen == 1 then titleScreen(fn, "/SA/background.bmp") end
 		if screen == 2 then titleScreen(fn, "/Images/EarthLCD_320x240_Splash.bmp") end
+		if screen == 2 then
+			local x1 = 20
+			local y1 = 15
+			local x2 = x1 + 50
+			local y2 = y1 + 50
+			local margin = 8
+			ez.BoxFill(x1 - margin, y1 - margin, x2 + margin, y2 + margin, ez.RGB(0xff, 0xff, 0xff)) -- X1, Y1, X2, Y2, Color
+			ez.SetColor(ez.RGB(0, 0, 0))
+			ez.SetBgColor(ez.RGB(0, 0, 0))
+			ez.SetXY(x1,y1)
+			ez.PutQRCode("http://earthlcd.com/")
+		end
 		screen_change = false
 	end
 	if screen == 0 then
 		-- renderOscope(a, 2147483648) -- 2^31 = 2147483648
 		-- renderOscope(a, 1073741824) -- 2^30 = 1073741824
-		renderOscope(a, 536870912) -- 2^29 = 536870912
+		renderOscope(audio_global, 536870912) -- 2^29 = 536870912
 	elseif screen == 1 then
-		renderSpectrum()
+		renderSpectrum(audio_global, dft_global)
 	elseif screen == 2 then
+	elseif screen == 3 then
 	end
 end
 
