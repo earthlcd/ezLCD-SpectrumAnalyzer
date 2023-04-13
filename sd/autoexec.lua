@@ -207,7 +207,12 @@ function ProcessButtons(id, event)
 		str = "screen=" .. tostring(screen)
 		ez.SerialTx(str .. "\r\n", 80, debug_port)
 		end
-	if id == 1 then
+	if id == 1 and event == 1 then
+		if fake_audio == true then
+			fake_audio = false
+		else
+			fake_audio = true
+		end
 	end
 
 	ez.Button(id, event)
@@ -220,6 +225,7 @@ font_height = 240 / 8 -- = 30
 screen = 0
 screen_max = 2
 screen_change = true
+fake_audio = false
 
 -- Wait 10 seconds for USB to enumerate
 -- ez.Wait_ms(10000)
@@ -237,7 +243,7 @@ ez.SerialTx("Frames: " .. ez.NoOfFrames .. "\r\n", 80, debug_port)
 
 -- Setup button(s)
 ez.Button(0, 1, -1, -11, -1, 0,  0, 319, 156) -- Scope button
--- ez.Button(1, 1, -1, -11, -1, 210, 35, 110, 35) -- Clear button
+ez.Button(1, 1, -1, -11, -1, 150, 200, 20, 40) -- fake / real
 -- ez.Button(2, 1, -1, -11, -1, 0, 0, 50, 40)     -- Menu
 -- ez.Button(3, 1, -1, -11, -1, 0, 80, 320, 150)  -- Plot Area
 
@@ -265,12 +271,15 @@ spectrum = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 1
 
 local freq = 0
 while 1 do
-	freq = freq + 0.5;
+	freq = freq + 0.1001;
 	if freq > ez.dft_size(dft_global) then freq = 0 end
 
 	ez.Pin(5, 0) -- PinNo, Value
-	-- ez.I2Sread(audio_global)
-	ez.I2Sfake(audio_global, freq, 500000000)
+	if fake_audio == true then
+		ez.I2Sfake(audio_global, freq, 500000000)
+	else
+		ez.I2Sread(audio_global)
+	end 
 	ez.I2Sdft(audio_global, dft_global, 30.0)
 	ez.Pin(5, 1) -- PinNo, Value
 	if screen_change == true then
