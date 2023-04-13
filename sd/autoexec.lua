@@ -91,23 +91,34 @@ end
 function renderSpectrum(audio, dft)
 	local result
 
-	local x_delta = 18
-	local y_min = 20
+	local x_min = 11
+	local x_max = ez.Width-x_min
+	local x_delta = math.floor((x_max - x_min) / ez.dft_size(dft))
+
+	local y_min = 10
 	local y_max = 156
 	local peak = y_max - y_min
 	--f72585 -> 3a0ca3 -> 4cc9f0
 
-	for f = 1, #spectrum, 1 do
-		-- local left = ez.dft_getReal(dft, index) + .0
+	-- ez.BoxFill(x_min, y_min, x_max+1, y_max+1, ez.RGB(0, 0, 00)) -- X1, Y1, X2, Y2, Color
+	-- ez.SerialTx("ez.dft_size()=" .. string.format("%d", ez.dft_size(dft)) .. "\r\n", 80, debug_port)
+
+	-- ez.SerialTx("left[" .. string.format("%d", x) .. "]=" .. string.format("%08x", left) .. "    ", 80, debug_port)
+	-- ez.SerialTx("real[" .. string.format("%d", f) .. "]=" .. string.format("%0.2f", real) .. "\r\n", 80, debug_port)
+
+	for f = 1, ez.dft_size(dft), 1 do
+		local real = ez.dft_getReal(dft, f)
 
 		local x = f * x_delta
-		local c = math.floor( ( f + .0) / #spectrum * 255)
-		spectrum[f] = spectrum[f] + math.random(-5,5)
-		if(spectrum[f] > peak) then spectrum[f] = peak end
-		if(spectrum[f] < 0) then spectrum[f] = 0 end
+		-- color calc
+		local c = math.floor( ( f + .0) / ez.dft_size(dft) * 255)
 
-		ez.BoxFill(x, y_min, x + x_delta , y_max - spectrum[f], ez.RGB(0, 0, 0)) -- X1, Y1, X2, Y2, Color
-		ez.BoxFill(x, y_max - spectrum[f], x + x_delta , y_max, ez.RGB(c, spectrum[f], 255-c)) -- X1, Y1, X2, Y2, Color
+		real = math.floor(real * peak)
+		if(real > peak) then real = peak end
+		if(real < 0) then real = 0 end
+
+		ez.BoxFill(x, y_min, x + x_delta , y_max - real, ez.RGB(0, 0, 0)) -- X1, Y1, X2, Y2, Color
+		ez.BoxFill(x, y_max - real, x + x_delta , y_max, ez.RGB(c, real, 255-c)) -- X1, Y1, X2, Y2, Color
 	end
 
 end
@@ -247,14 +258,20 @@ ez.Pin(3, 1) -- PinNo, Value
 
 -- allocate memory for the samples
 audio_global = ez.audio_new(300)
-dft_global = ez.dft_new(300)
+dft_global = ez.dft_new(20)
 ez.I2SopenMaster(1, 2)
 
 spectrum = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 140}
 
+local freq = 0
 while 1 do
+	freq = freq + 0.5;
+	if freq > ez.dft_size(dft_global) then freq = 0 end
+
 	ez.Pin(5, 0) -- PinNo, Value
-	ez.I2Sread(audio_global)
+	-- ez.I2Sread(audio_global)
+	ez.I2Sfake(audio_global, freq, 500000000)
+	ez.I2Sdft(audio_global, dft_global, 30.0)
 	ez.Pin(5, 1) -- PinNo, Value
 	if screen_change == true then
 		if screen == 0 then titleScreen(fn, "/SA/oscilloscope.bmp") end
@@ -262,15 +279,15 @@ while 1 do
 		if screen == 2 then titleScreen(fn, "/Images/EarthLCD_320x240_Splash.bmp") end
 		if screen == 2 then
 			local x1 = 20
-			local y1 = 15
-			local x2 = x1 + 50
-			local y2 = y1 + 50
+			local y1 = 8
+			local x2 = x1 + 58
+			local y2 = y1 + 58
 			local margin = 8
 			ez.BoxFill(x1 - margin, y1 - margin, x2 + margin, y2 + margin, ez.RGB(0xff, 0xff, 0xff)) -- X1, Y1, X2, Y2, Color
 			ez.SetColor(ez.RGB(0, 0, 0))
 			ez.SetBgColor(ez.RGB(0, 0, 0))
 			ez.SetXY(x1,y1)
-			ez.PutQRCode("http://earthlcd.com/")
+			ez.PutQRCode("http://earthlcd.com/products/ezlcd-5x")
 		end
 		screen_change = false
 	end
