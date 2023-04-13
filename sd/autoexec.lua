@@ -78,17 +78,17 @@ function printBox(x1, y1, x2, fg, bg, font_height, str) -- Show a title sequence
 	print(str)
 end
 
-function titleScreen(fn) -- Show a title sequence for the program
+function titleScreen(fn, filename) -- Show a title sequence for the program
 	local result
-	ez.Cls(ez.RGB(0,0,0))
+	-- ez.Cls(ez.RGB(0,0,0))
 
 	ez.SetAlpha(255)
 	ez.SetXY(0, 0)
-	result = ez.PutPictFile(0, 0, "/SA/background.bmp")
-	ez.SerialTx("result=".. tostring(result) .. "\r\n", 80, debug_port) -- doesn't work
+	result = ez.PutPictFile(0, 0, filename)
+	ez.SerialTx("Loading " .. filename .. " result=".. tostring(result) .. "\r\n", 80, debug_port) -- doesn't work
 end
 
-function renderSpectrum() -- Show a title sequence for the program
+function renderSpectrum()
 	local result
 
 	local x_delta = 18
@@ -110,6 +110,38 @@ function renderSpectrum() -- Show a title sequence for the program
 
 end
 
+function renderOscope(audio, gain)
+	local result
+
+	local x_min = 11
+	local x_max = ez.Width-x_min
+	local y_min = 10
+	local y_max = 156
+	local y_mid = (y_max - y_min) / 2 + y_min
+	local y_max = 156
+	local peak_to_peak = y_max - y_min
+	local peak = peak_to_peak / 2
+
+	-- erase previous scope
+	ez.BoxFill(x_min, y_min, x_max+1, y_max, ez.RGB(0, 0, 40)) -- X1, Y1, X2, Y2, Color
+
+	-- ez.SerialTx("ez.audio_size()=" .. string.format("%d", ez.audio_size(audio)) .. "\r\n", 80, debug_port)
+
+	-- ez.SerialTx("left[" .. string.format("%d", x) .. "]=" .. string.format("%08x", left) .. "    ", 80, debug_port)
+	-- ez.SerialTx("left[" .. string.format("%d", x) .. "]=" .. string.format("%0.0f", left) .. "\r\n", 80, debug_port)
+
+	local index = 1
+	for x = x_min, x_max, 1 do
+		local left = ez.audio_getLeft(a, index) + .0
+		index = index + 1
+		left = left / gain * (peak)
+		if(left > peak) then left = peak end
+		if(left < -peak) then left = -peak end
+
+		ez.Plot( x, math.floor(left + y_mid), ez.RGB(math.floor(math.abs(left)), 0xff - math.floor(math.abs(left)), 0) )
+	end
+
+end
 
 debug_port = 0
 -- Event Handelers
@@ -122,8 +154,15 @@ end
 function ProcessButtons(id, event)
 	-- TODO: Insert your button processing code here
 	-- Display the image which corresponds to the event
-	if id == 0 then
-	end
+	if id == 0 and event == 1 then
+		screen_change = true
+		screen = screen + 1
+		if screen > screen_max then
+			screen = 0
+		end
+		str = "screen=" .. tostring(screen)
+		ez.SerialTx(str .. "\r\n", 80, debug_port)
+		end
 	if id == 1 then
 	end
 
@@ -134,6 +173,9 @@ end
 
 fn = 14
 font_height = 240 / 8 -- = 30
+screen = 0
+screen_max = 2
+screen_change = true
 
 -- Wait 10 seconds for USB to enumerate
 -- ez.Wait_ms(10000)
@@ -150,34 +192,49 @@ ez.SerialTx(ez.Width .. "x" .. ez.Height .. "\r\n", 80, debug_port)
 ez.SerialTx("Frames: " .. ez.NoOfFrames .. "\r\n", 80, debug_port)
 
 -- Setup button(s)
-ez.Button(0, 1, -1, -11, -1, 210,  0, 110, 35) -- Tare button
-ez.Button(1, 1, -1, -11, -1, 210, 35, 110, 35) -- Clear button
-ez.Button(2, 1, -1, -11, -1, 0, 0, 50, 40)     -- Menu
-ez.Button(3, 1, -1, -11, -1, 0, 80, 320, 150)  -- Plot Area
+ez.Button(0, 1, -1, -11, -1, 0,  0, 319, 156) -- Scope button
+-- ez.Button(1, 1, -1, -11, -1, 210, 35, 110, 35) -- Clear button
+-- ez.Button(2, 1, -1, -11, -1, 0, 0, 50, 40)     -- Menu
+-- ez.Button(3, 1, -1, -11, -1, 0, 80, 320, 150)  -- Plot Area
 
 
 -- Start to receive button events
 ez.SetButtonEvent("ProcessButtons")
 
 -- Main
-titleScreen(fn)
--- ez.Wait_ms(500)
 
+----------------------------------------------------------------------------
+-- Set two GPIO pins to power the microphone (it only draw 2.5mA at 3.3V) --
+----------------------------------------------------------------------------
+ez.SetPinOut(1, 0, false, false, false, 0) -- PinNo [, InitialState [, OpenDrain [, PullUp [, PullDn [, Speed]]]]]
+ez.SetPinOut(3, 1, false, false, false, 0) -- PinNo [, InitialState [, OpenDrain [, PullUp [, PullDn [, Speed]]]]]
+ez.SetPinOut(5, 1, false, false, false, 0) -- PinNo [, InitialState [, OpenDrain [, PullUp [, PullDn [, Speed]]]]]
+ez.Pin(1, 0) -- PinNo, Value
+ez.Pin(3, 1) -- PinNo, Value
+
+-- allocate memory for the samples
+a = ez.audio_new(300)
 ez.I2SopenMaster(1, 2)
-I2Sread = ez.I2Sread(1,2)
-ez.SerialTx("I2Sread: " .. I2Sread .. "\r\n", 80, debug_port)
-
-local graph_xmin = 10
-local graph_xmax = 310
-local graph_x = graph_xmin
-
-local graph_ymid = 150
-local graph_ymin =  81
-local graph_ymax = 230
-local graph_y = graph_ymid
 
 spectrum = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 140}
+
 while 1 do
-	renderSpectrum()
+	ez.Pin(5, 0) -- PinNo, Value
+	ez.I2Sread(a)
+	ez.Pin(5, 1) -- PinNo, Value
+	if screen_change == true then
+		if screen == 0 then titleScreen(fn, "/SA/oscilloscope.bmp") end
+		if screen == 1 then titleScreen(fn, "/SA/background.bmp") end
+		if screen == 2 then titleScreen(fn, "/Images/EarthLCD_320x240_Splash.bmp") end
+		screen_change = false
+	end
+	if screen == 0 then
+		-- renderOscope(a, 2147483648) -- 2^31 = 2147483648
+		-- renderOscope(a, 1073741824) -- 2^30 = 1073741824
+		renderOscope(a, 536870912) -- 2^29 = 536870912
+	elseif screen == 1 then
+		renderSpectrum()
+	elseif screen == 2 then
+	end
 end
 
