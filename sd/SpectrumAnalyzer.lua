@@ -283,9 +283,9 @@ while 1 do
 	ez.I2Sdft(audio_global, dft_global, 30.0)
 	ez.Pin(5, 1) -- PinNo, Value
 	if screen_change == true then
-		if screen == 0 then titleScreen(fn, "/SA/oscilloscope.bmp") end
-		if screen == 1 then titleScreen(fn, "/SA/background.bmp") end
-		if screen == 2 then titleScreen(fn, "/Images/EarthLCD_320x240_Splash.bmp") end
+		if screen == 0 then titleScreen(fn, "/SA/oscilloscope.jpg") end
+		if screen == 1 then titleScreen(fn, "/SA/background.jpg") end
+		if screen == 2 then titleScreen(fn, "/Images/EarthLCD_320x240_Splash.jpg") end
 		if screen == 2 then
 			local x1 = 20
 			local y1 = 8
